@@ -1,0 +1,12 @@
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project-wide env files (each subproject has its own too)
+.env
+.env.local
+.env.*.local
