@@ -24,7 +24,6 @@ function filterKey(f: Filter): TranslationKey {
 export default function DashboardPage() {
   const router = useRouter()
   const { t } = useI18n()
-  const [email, setEmail] = useState<string | null>(null)
   const [tasks, setTasks] = useState<Task[]>([])
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
@@ -44,7 +43,6 @@ export default function DashboardPage() {
         router.replace('/login')
         return
       }
-      setEmail(user.email ?? null)
       await fetchTasks()
       setLoading(false)
 

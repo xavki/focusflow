@@ -43,7 +43,6 @@ export default function CalendarPage() {
     t('calendar.month.10'),
     t('calendar.month.11'),
   ]
-  const [email, setEmail] = useState<string | null>(null)
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -61,7 +60,6 @@ export default function CalendarPage() {
         router.replace('/login')
         return
       }
-      setEmail(user.email ?? null)
       await fetchTasks()
       setLoading(false)
 
