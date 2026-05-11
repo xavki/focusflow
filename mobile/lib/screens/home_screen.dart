@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../main.dart';
 import '../models/task.dart';
 import '../widgets/task_dialog.dart';
+import '../widgets/ai_plan_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -253,6 +254,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               actions: [
+                IconButton(
+                  icon: const Icon(Icons.auto_awesome),
+                  tooltip: 'Plan with AI',
+                  onPressed: () => AIPlanDialog.show(context),
+                ),
                 IconButton(
                   icon: const Icon(Icons.checklist),
                   tooltip: 'Select multiple',
