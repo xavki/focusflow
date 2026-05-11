@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/main_scaffold.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,7 +43,7 @@ class AuthGate extends StatelessWidget {
       stream: supabase.auth.onAuthStateChange,
       builder: (context, snapshot) {
         final session = supabase.auth.currentSession;
-        if (session != null) return const HomeScreen();
+        if (session != null) return const MainScaffold();
         return const LoginScreen();
       },
     );
