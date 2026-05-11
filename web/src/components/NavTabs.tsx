@@ -2,14 +2,18 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-
-const tabs = [
-  { href: '/dashboard', label: 'List' },
-  { href: '/calendar', label: 'Calendar' },
-]
+import { useI18n } from '@/lib/i18n/context'
 
 export function NavTabs() {
   const pathname = usePathname()
+  const { t } = useI18n()
+
+  const tabs = [
+    { href: '/dashboard', label: t('nav.list') },
+    { href: '/calendar', label: t('nav.calendar') },
+    { href: '/profile', label: t('nav.profile') },
+  ]
+
   return (
     <nav className="flex gap-1 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-900">
       {tabs.map((tab) => {

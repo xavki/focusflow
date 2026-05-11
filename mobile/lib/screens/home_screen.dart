@@ -21,6 +21,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _loading = true;
   RealtimeChannel? _channel;
   final _searchCtrl = TextEditingController();
+  bool _selectMode = false;
+  final Set<String> _selected = {};
 
   @override
   void initState() {
@@ -135,20 +137,78 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _toggleTask(Task task) async {
+    setState(() {
+      _tasks = _tasks
+          .map((t) => t.id == task.id
+              ? Task(
+                  id: t.id,
+                  userId: t.userId,
+                  title: t.title,
+                  description: t.description,
+                  priority: t.priority,
+                  completed: !t.completed,
+                  dueDate: t.dueDate,
+                  createdAt: t.createdAt,
+                )
+              : t)
+          .toList();
+    });
     try {
       await supabase
           .from('tasks')
           .update({'completed': !task.completed})
           .eq('id', task.id);
     } catch (e) {
+      setState(() {
+        _tasks = _tasks
+            .map((t) => t.id == task.id ? task : t)
+            .toList();
+      });
       _showError(e.toString());
     }
   }
 
   Future<void> _deleteTask(Task task) async {
+    final backup = List<Task>.from(_tasks);
+    setState(() => _tasks = _tasks.where((t) => t.id != task.id).toList());
     try {
       await supabase.from('tasks').delete().eq('id', task.id);
     } catch (e) {
+      setState(() => _tasks = backup);
+      _showError(e.toString());
+    }
+  }
+
+  void _toggleSelected(String id) {
+    setState(() {
+      if (_selected.contains(id)) {
+        _selected.remove(id);
+      } else {
+        _selected.add(id);
+      }
+    });
+  }
+
+  void _exitSelectMode() {
+    setState(() {
+      _selectMode = false;
+      _selected.clear();
+    });
+  }
+
+  Future<void> _deleteSelected() async {
+    if (_selected.isEmpty) return;
+    final ids = _selected.toList();
+    final backup = List<Task>.from(_tasks);
+    setState(() {
+      _tasks = _tasks.where((t) => !_selected.contains(t.id)).toList();
+      _selectMode = false;
+      _selected.clear();
+    });
+    try {
+      await supabase.from('tasks').delete().inFilter('id', ids);
+    } catch (e) {
+      setState(() => _tasks = backup);
       _showError(e.toString());
     }
   }
@@ -167,32 +227,59 @@ class _HomeScreenState extends State<HomeScreen> {
     final pending = filtered.where((t) => !t.completed).length;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'FocusFlow',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        actions: [
-          ValueListenableBuilder<ThemeMode>(
-            valueListenable: themeMode,
-            builder: (_, mode, __) => IconButton(
-              icon: Icon(themeIcon(mode)),
-              tooltip: 'Theme: ${mode.name}',
-              onPressed: toggleTheme,
+      appBar: _selectMode
+          ? AppBar(
+              leading: IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: _exitSelectMode,
+              ),
+              title: Text(
+                '${_selected.length} selected',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              backgroundColor: Theme.of(context).colorScheme.errorContainer,
+              foregroundColor: Theme.of(context).colorScheme.onErrorContainer,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  tooltip: 'Delete selected',
+                  onPressed: _selected.isEmpty ? null : _deleteSelected,
+                ),
+              ],
+            )
+          : AppBar(
+              title: const Text(
+                'FocusFlow',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.checklist),
+                  tooltip: 'Select multiple',
+                  onPressed: () => setState(() => _selectMode = true),
+                ),
+                ValueListenableBuilder<ThemeMode>(
+                  valueListenable: themeMode,
+                  builder: (_, mode, __) => IconButton(
+                    icon: Icon(themeIcon(mode)),
+                    tooltip: 'Theme: ${mode.name}',
+                    onPressed: toggleTheme,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.logout),
+                  tooltip: 'Sign out',
+                  onPressed: () => supabase.auth.signOut(),
+                ),
+              ],
             ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Sign out',
-            onPressed: () => supabase.auth.signOut(),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => TaskDialog.show(context),
-        icon: const Icon(Icons.add),
-        label: const Text('New task'),
-      ),
+      floatingActionButton: _selectMode
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => TaskDialog.show(context),
+              icon: const Icon(Icons.add),
+              label: const Text('New task'),
+            ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : Column(
@@ -279,9 +366,18 @@ class _HomeScreenState extends State<HomeScreen> {
                             final task = filtered[i];
                             return _TaskTile(
                               task: task,
+                              selectMode: _selectMode,
+                              isSelected: _selected.contains(task.id),
                               onToggle: () => _toggleTask(task),
                               onDelete: () => _deleteTask(task),
                               onEdit: () => TaskDialog.show(context, task: task),
+                              onSelectTap: () => _toggleSelected(task.id),
+                              onLongPress: () {
+                                setState(() {
+                                  _selectMode = true;
+                                  _selected.add(task.id);
+                                });
+                              },
                             );
                           },
                         ),
@@ -294,35 +390,38 @@ class _HomeScreenState extends State<HomeScreen> {
 
 class _TaskTile extends StatelessWidget {
   final Task task;
+  final bool selectMode;
+  final bool isSelected;
   final VoidCallback onToggle;
   final VoidCallback onDelete;
   final VoidCallback onEdit;
+  final VoidCallback onSelectTap;
+  final VoidCallback onLongPress;
 
   const _TaskTile({
     required this.task,
+    required this.selectMode,
+    required this.isSelected,
     required this.onToggle,
     required this.onDelete,
     required this.onEdit,
+    required this.onSelectTap,
+    required this.onLongPress,
   });
 
   @override
   Widget build(BuildContext context) {
     final overdue = isOverdue(task.dueDate, task.completed);
 
-    return Dismissible(
-      key: ValueKey(task.id),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        color: Colors.red,
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        child: const Icon(Icons.delete, color: Colors.white),
-      ),
-      onDismissed: (_) => onDelete(),
+    final tile = Container(
+      color: isSelected
+          ? Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.3)
+          : null,
       child: ListTile(
         leading: Checkbox(
-          value: task.completed,
-          onChanged: (_) => onToggle(),
+          value: selectMode ? isSelected : task.completed,
+          activeColor: selectMode ? Colors.red : null,
+          onChanged: (_) => selectMode ? onSelectTap() : onToggle(),
         ),
         title: Row(
           children: [
@@ -414,8 +513,24 @@ class _TaskTile extends StatelessWidget {
               ),
           ],
         ),
-        onTap: onEdit,
+        onTap: selectMode ? onSelectTap : onEdit,
+        onLongPress: selectMode ? null : onLongPress,
       ),
+    );
+
+    if (selectMode) return tile;
+
+    return Dismissible(
+      key: ValueKey(task.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        color: Colors.red,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        child: const Icon(Icons.delete, color: Colors.white),
+      ),
+      onDismissed: (_) => onDelete(),
+      child: tile,
     );
   }
 }

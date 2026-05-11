@@ -6,12 +6,8 @@ import { supabase } from '@/lib/supabase'
 import type { Task } from '@/lib/types'
 import { todayISO } from '@/lib/dates'
 import { NavTabs } from '@/components/NavTabs'
-
-const WEEK_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-]
+import { ThemeToggle } from '@/components/HeaderControls'
+import { useI18n } from '@/lib/i18n/context'
 
 function pad(n: number) {
   return String(n).padStart(2, '0')
@@ -23,6 +19,9 @@ function toIso(year: number, month: number, day: number) {
 
 export default function CalendarPage() {
   const router = useRouter()
+  const { t, locale } = useI18n()
+  const WEEK_DAYS = [0, 1, 2, 3, 4, 5, 6].map((i) => t(`calendar.weekday.${i}` as const))
+  const MONTHS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => t(`calendar.month.${i}` as const))
   const [email, setEmail] = useState<string | null>(null)
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
@@ -46,7 +45,7 @@ export default function CalendarPage() {
       setLoading(false)
 
       channel = supabase
-        .channel('calendar-tasks')
+        .channel(`calendar-tasks-${Math.random().toString(36).slice(2)}`)
         .on(
           'postgres_changes',
           {
@@ -133,7 +132,7 @@ export default function CalendarPage() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-black">
-        <div className="text-zinc-400">Loading…</div>
+        <div className="text-zinc-400">{t('common.loading')}</div>
       </div>
     )
   }
@@ -145,16 +144,16 @@ export default function CalendarPage() {
       <header className="sticky top-0 z-10 border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-4">
-            <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">FocusFlow</h1>
+            <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">{t('app.name')}</h1>
             <NavTabs />
           </div>
-          <div className="flex items-center gap-3">
-            <span className="hidden text-sm text-zinc-500 sm:inline">{email}</span>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
             <button
               onClick={handleLogout}
               className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
             >
-              Sign out
+              {t('auth.signOut')}
             </button>
           </div>
         </div>
@@ -170,7 +169,7 @@ export default function CalendarPage() {
               onClick={goToday}
               className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
             >
-              Today
+              {t('calendar.todayBtn')}
             </button>
             <button
               onClick={goPrev}
@@ -246,7 +245,7 @@ export default function CalendarPage() {
                   })}
                   {dayTasks.length > 3 && (
                     <div className="px-1.5 text-[10px] text-zinc-500">
-                      +{dayTasks.length - 3} more
+                      {t('calendar.moreCount', { count: dayTasks.length - 3 })}
                     </div>
                   )}
                 </div>
@@ -262,6 +261,7 @@ export default function CalendarPage() {
           tasks={tasksByDate.get(selectedDay) ?? []}
           onClose={() => setSelectedDay(null)}
           onError={setError}
+          locale={locale}
         />
       )}
     </div>
@@ -305,20 +305,26 @@ function DayModal({
   tasks,
   onClose,
   onError,
+  locale,
 }: {
   iso: string
   tasks: Task[]
   onClose: () => void
   onError: (msg: string) => void
+  locale: string
 }) {
+  const { t } = useI18n()
   const [newTitle, setNewTitle] = useState('')
 
-  const niceDate = new Date(iso + 'T00:00:00').toLocaleDateString(undefined, {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  })
+  const niceDate = new Date(iso + 'T00:00:00').toLocaleDateString(
+    locale === 'es' ? 'es-ES' : 'en-US',
+    {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    }
+  )
 
   async function addForDay(e: React.FormEvent) {
     e.preventDefault()
@@ -364,7 +370,7 @@ function DayModal({
               {niceDate}
             </h3>
             <p className="text-sm text-zinc-500">
-              {tasks.length} {tasks.length === 1 ? 'task' : 'tasks'}
+              {tasks.length} {tasks.length === 1 ? t('calendar.task') : t('calendar.tasks')}
             </p>
           </div>
           <button
@@ -381,21 +387,21 @@ function DayModal({
             type="text"
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
-            placeholder="Add a task for this day…"
+            placeholder={t('calendar.addForDay')}
             className="flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
           />
           <button
             type="submit"
             className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 active:scale-95"
           >
-            Add
+            {t('tasks.add')}
           </button>
         </form>
 
         <ul className="mt-4 max-h-72 space-y-2 overflow-y-auto">
           {tasks.length === 0 && (
             <li className="rounded-lg border border-dashed border-zinc-300 px-4 py-6 text-center text-sm text-zinc-500 dark:border-zinc-700">
-              No tasks for this day.
+              {t('calendar.noTasksDay')}
             </li>
           )}
 
@@ -423,7 +429,7 @@ function DayModal({
                 onClick={() => remove(t.id)}
                 className="text-xs text-zinc-400 opacity-0 transition hover:text-red-600 group-hover:opacity-100"
               >
-                Delete
+                {t('tasks.delete')}
               </button>
             </li>
           ))}

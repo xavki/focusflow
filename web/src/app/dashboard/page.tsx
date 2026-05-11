@@ -7,9 +7,13 @@ import type { Filter, Priority, Task } from '@/lib/types'
 import { PRIORITY_COLORS, PRIORITY_LABEL } from '@/lib/types'
 import { addDaysISO, formatDueDate, isOverdue, todayISO } from '@/lib/dates'
 import { NavTabs } from '@/components/NavTabs'
+import { AIPlanModal } from '@/components/AIPlanModal'
+import { ThemeToggle } from '@/components/HeaderControls'
+import { useI18n } from '@/lib/i18n/context'
 
 export default function DashboardPage() {
   const router = useRouter()
+  const { t } = useI18n()
   const [email, setEmail] = useState<string | null>(null)
   const [tasks, setTasks] = useState<Task[]>([])
   const [search, setSearch] = useState('')
@@ -18,6 +22,9 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [showAdd, setShowAdd] = useState(false)
+  const [showAI, setShowAI] = useState(false)
+  const [selectMode, setSelectMode] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     let channel: ReturnType<typeof supabase.channel> | null = null
@@ -32,7 +39,7 @@ export default function DashboardPage() {
       setLoading(false)
 
       channel = supabase
-        .channel('tasks-changes')
+        .channel(`tasks-changes-${Math.random().toString(36).slice(2)}`)
         .on(
           'postgres_changes',
           {
@@ -106,16 +113,58 @@ export default function DashboardPage() {
   }, [tasks, filter, search])
 
   async function toggleTask(task: Task) {
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === task.id ? { ...t, completed: !t.completed } : t
+      )
+    )
     const { error } = await supabase
       .from('tasks')
       .update({ completed: !task.completed })
       .eq('id', task.id)
-    if (error) setError(error.message)
+    if (error) {
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === task.id ? { ...t, completed: task.completed } : t
+        )
+      )
+      setError(error.message)
+    }
   }
 
   async function deleteTask(id: string) {
+    const backup = tasks
+    setTasks((prev) => prev.filter((t) => t.id !== id))
     const { error } = await supabase.from('tasks').delete().eq('id', id)
-    if (error) setError(error.message)
+    if (error) {
+      setTasks(backup)
+      setError(error.message)
+    }
+  }
+
+  function toggleSelected(id: string) {
+    const next = new Set(selected)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setSelected(next)
+  }
+
+  function exitSelectMode() {
+    setSelectMode(false)
+    setSelected(new Set())
+  }
+
+  async function deleteSelected() {
+    if (selected.size === 0) return
+    const ids = Array.from(selected)
+    const backup = tasks
+    setTasks((prev) => prev.filter((t) => !selected.has(t.id)))
+    exitSelectMode()
+    const { error } = await supabase.from('tasks').delete().in('id', ids)
+    if (error) {
+      setTasks(backup)
+      setError(error.message)
+    }
   }
 
   async function handleLogout() {
@@ -126,7 +175,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-black">
-        <div className="text-zinc-400">Loading…</div>
+        <div className="text-zinc-400">{t('common.loading')}</div>
       </div>
     )
   }
@@ -138,16 +187,16 @@ export default function DashboardPage() {
       <header className="sticky top-0 z-10 border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
         <div className="mx-auto flex max-w-2xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-4">
-            <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">FocusFlow</h1>
+            <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">{t('app.name')}</h1>
             <NavTabs />
           </div>
-          <div className="flex items-center gap-3">
-            <span className="hidden text-sm text-zinc-500 sm:inline">{email}</span>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
             <button
               onClick={handleLogout}
               className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
             >
-              Sign out
+              {t('auth.signOut')}
             </button>
           </div>
         </div>
@@ -157,18 +206,52 @@ export default function DashboardPage() {
         <div className="flex items-end justify-between">
           <div>
             <h2 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-              Your tasks
+              {t('tasks.your')}
             </h2>
             <p className="mt-1 text-sm text-zinc-500">
-              {pending} pending {filter !== 'all' && `· ${filterLabel(filter)}`}
+              {pending} {t('tasks.pending')} {filter !== 'all' && `· ${t(`filter.${filter === 'no-date' ? 'noDate' : filter}` as const)}`}
             </p>
           </div>
-          <button
-            onClick={() => setShowAdd(true)}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 active:scale-95"
-          >
-            + New task
-          </button>
+          <div className="flex gap-2">
+            {selectMode ? (
+              <>
+                <button
+                  onClick={exitSelectMode}
+                  className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                >
+                  {t('tasks.cancel')}
+                </button>
+                <button
+                  onClick={deleteSelected}
+                  disabled={selected.size === 0}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700 disabled:opacity-50 active:scale-95"
+                >
+                  {t('tasks.delete')} ({selected.size})
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => setSelectMode(true)}
+                  className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                >
+                  {t('tasks.select')}
+                </button>
+                <button
+                  onClick={() => setShowAI(true)}
+                  className="rounded-lg border border-indigo-300 bg-white px-4 py-2 text-sm font-medium text-indigo-600 transition hover:bg-indigo-50 active:scale-95 dark:border-indigo-800 dark:bg-zinc-950 dark:text-indigo-400 dark:hover:bg-indigo-950/30"
+                >
+                  {t('tasks.planWithAI')}
+                </button>
+                <button
+                  onClick={() => setShowAdd(true)}
+                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 active:scale-95"
+                >
+                  {t('tasks.newTask')}
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="mt-6 flex items-center gap-2">
@@ -177,7 +260,7 @@ export default function DashboardPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search tasks…"
+              placeholder={t('tasks.search')}
               className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 pl-9 text-sm text-zinc-900 transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
             />
             <svg
@@ -202,7 +285,7 @@ export default function DashboardPage() {
                   : 'bg-zinc-200 text-zinc-700 hover:bg-zinc-300 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700'
               }`}
             >
-              {filterLabel(f)}
+              {t(`filter.${f === 'no-date' ? 'noDate' : f}` as const)}
             </button>
           ))}
         </div>
@@ -212,22 +295,35 @@ export default function DashboardPage() {
         <ul className="mt-6 space-y-2">
           {filteredTasks.length === 0 && (
             <li className="rounded-xl border border-dashed border-zinc-300 px-4 py-12 text-center text-sm text-zinc-500 dark:border-zinc-700">
-              {search ? 'No tasks match your search.' : 'No tasks here.'}
+              {search ? t('tasks.noMatch') : t('tasks.none')}
             </li>
           )}
 
           {filteredTasks.map((task) => {
             const overdue = isOverdue(task.due_date, task.completed)
+            const isSelected = selected.has(task.id)
             return (
               <li
                 key={task.id}
-                className="group flex items-start gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 transition hover:border-zinc-300 hover:shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700"
+                onClick={selectMode ? () => toggleSelected(task.id) : undefined}
+                className={`group flex items-start gap-3 rounded-xl border bg-white px-4 py-3 transition hover:shadow-sm dark:bg-zinc-950 ${
+                  selectMode ? 'cursor-pointer' : ''
+                } ${
+                  isSelected
+                    ? 'border-red-400 bg-red-50 dark:border-red-600 dark:bg-red-950/30'
+                    : 'border-zinc-200 hover:border-zinc-300 dark:border-zinc-800 dark:hover:border-zinc-700'
+                }`}
               >
                 <input
                   type="checkbox"
-                  checked={task.completed}
-                  onChange={() => toggleTask(task)}
-                  className="mt-1 h-4 w-4 cursor-pointer rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                  checked={selectMode ? isSelected : task.completed}
+                  onChange={() =>
+                    selectMode ? toggleSelected(task.id) : toggleTask(task)
+                  }
+                  onClick={(e) => e.stopPropagation()}
+                  className={`mt-1 h-4 w-4 cursor-pointer rounded border-zinc-300 focus:ring-indigo-500 ${
+                    selectMode ? 'text-red-600 focus:ring-red-500' : 'text-indigo-600'
+                  }`}
                 />
 
                 <div className="flex-1 min-w-0">
@@ -280,13 +376,13 @@ export default function DashboardPage() {
                     onClick={() => setEditingTask(task)}
                     className="text-xs text-zinc-500 hover:text-indigo-600"
                   >
-                    Edit
+                    {t('tasks.edit')}
                   </button>
                   <button
                     onClick={() => deleteTask(task.id)}
                     className="text-xs text-zinc-500 hover:text-red-600"
                   >
-                    Delete
+                    {t('tasks.delete')}
                   </button>
                 </div>
               </li>
@@ -298,6 +394,7 @@ export default function DashboardPage() {
       {showAdd && (
         <TaskModal onClose={() => setShowAdd(false)} onError={setError} />
       )}
+      {showAI && <AIPlanModal onClose={() => setShowAI(false)} />}
       {editingTask && (
         <TaskModal
           task={editingTask}
@@ -309,15 +406,6 @@ export default function DashboardPage() {
   )
 }
 
-function filterLabel(f: Filter): string {
-  switch (f) {
-    case 'all': return 'All'
-    case 'today': return 'Today'
-    case 'week': return 'This week'
-    case 'no-date': return 'No date'
-  }
-}
-
 function TaskModal({
   task,
   onClose,
@@ -327,6 +415,7 @@ function TaskModal({
   onClose: () => void
   onError: (msg: string) => void
 }) {
+  const { t } = useI18n()
   const [title, setTitle] = useState(task?.title ?? '')
   const [description, setDescription] = useState(task?.description ?? '')
   const [dueDate, setDueDate] = useState(task?.due_date ?? '')
@@ -377,7 +466,7 @@ function TaskModal({
       >
         <div className="flex items-start justify-between">
           <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-            {task ? 'Edit task' : 'New task'}
+            {task ? t('tasks.editTask') : t('tasks.newTaskTitle')}
           </h3>
           <button
             type="button"
@@ -389,7 +478,7 @@ function TaskModal({
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-zinc-500">Title</label>
+          <label className="block text-xs font-medium text-zinc-500">{t('tasks.title')}</label>
           <input
             type="text"
             value={title}
@@ -402,7 +491,7 @@ function TaskModal({
 
         <div>
           <label className="block text-xs font-medium text-zinc-500">
-            Description <span className="text-zinc-400">(optional)</span>
+            {t('tasks.description')} <span className="text-zinc-400">{t('tasks.descriptionOptional')}</span>
           </label>
           <textarea
             value={description}
@@ -414,7 +503,7 @@ function TaskModal({
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-medium text-zinc-500">Due date</label>
+            <label className="block text-xs font-medium text-zinc-500">{t('tasks.dueDate')}</label>
             <input
               type="date"
               value={dueDate}
@@ -423,16 +512,16 @@ function TaskModal({
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-zinc-500">Priority</label>
+            <label className="block text-xs font-medium text-zinc-500">{t('tasks.priority')}</label>
             <select
               value={priority}
               onChange={(e) => setPriority(e.target.value as Priority | '')}
               className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
             >
-              <option value="">None</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
+              <option value="">{t('tasks.priorityNone')}</option>
+              <option value="high">{t('tasks.priorityHigh')}</option>
+              <option value="medium">{t('tasks.priorityMedium')}</option>
+              <option value="low">{t('tasks.priorityLow')}</option>
             </select>
           </div>
         </div>
@@ -443,14 +532,14 @@ function TaskModal({
             onClick={onClose}
             className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
           >
-            Cancel
+            {t('tasks.cancel')}
           </button>
           <button
             type="submit"
             disabled={saving}
             className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50 active:scale-95"
           >
-            {saving ? 'Saving…' : task ? 'Save' : 'Create'}
+            {saving ? t('tasks.saving') : task ? t('tasks.save') : t('tasks.create')}
           </button>
         </div>
       </form>

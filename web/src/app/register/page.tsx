@@ -4,9 +4,12 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { useI18n } from '@/lib/i18n/context'
+import { ThemeToggle, LanguageToggle } from '@/components/HeaderControls'
 
 export default function RegisterPage() {
   const router = useRouter()
+  const { t } = useI18n()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -30,21 +33,25 @@ export default function RegisterPage() {
     if (data.session) {
       router.replace('/dashboard')
     } else {
-      setInfo('Check your email to confirm your account.')
+      setInfo(t('auth.checkEmail'))
     }
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 dark:bg-black">
+      <div className="absolute right-4 top-4 flex gap-2">
+        <LanguageToggle />
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-sm space-y-6 rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
         <div>
-          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">Create account</h1>
-          <p className="mt-1 text-sm text-zinc-500">Start using FocusFlow</p>
+          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">{t('auth.signUp')}</h1>
+          <p className="mt-1 text-sm text-zinc-500">{t('auth.startUsing')}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Email</label>
+            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('auth.email')}</label>
             <input
               type="email"
               required
@@ -55,7 +62,7 @@ export default function RegisterPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Password</label>
+            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('auth.password')}</label>
             <input
               type="password"
               required
@@ -74,14 +81,14 @@ export default function RegisterPage() {
             disabled={loading}
             className="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
           >
-            {loading ? 'Creating…' : 'Create account'}
+            {loading ? t('auth.creating') : t('auth.signUp')}
           </button>
         </form>
 
         <p className="text-center text-sm text-zinc-500">
-          Already have one?{' '}
+          {t('auth.haveAccount')}{' '}
           <Link href="/login" className="font-medium text-indigo-600 hover:underline">
-            Sign in
+            {t('auth.signIn')}
           </Link>
         </p>
       </div>
