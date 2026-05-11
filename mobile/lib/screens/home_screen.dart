@@ -249,7 +249,7 @@ class _HomeScreenState extends State<HomeScreen> {
             )
           : AppBar(
               title: const Text(
-                'FocusFlow',
+                'DayPlan',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               actions: [

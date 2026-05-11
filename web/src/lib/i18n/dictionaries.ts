@@ -1,6 +1,6 @@
 export const dictionaries = {
   en: {
-    'app.name': 'FocusFlow',
+    'app.name': 'DayPlan',
     'nav.list': 'List',
     'nav.calendar': 'Calendar',
     'nav.profile': 'Profile',
@@ -9,8 +9,8 @@ export const dictionaries = {
     'auth.signUp': 'Create account',
     'auth.signingIn': 'Signing in…',
     'auth.creating': 'Creating…',
-    'auth.welcomeBack': 'Welcome back to FocusFlow',
-    'auth.startUsing': 'Start using FocusFlow',
+    'auth.welcomeBack': 'Welcome back to DayPlan',
+    'auth.startUsing': 'Start using DayPlan',
     'auth.email': 'Email',
     'auth.password': 'Password',
     'auth.noAccount': 'No account?',
@@ -107,7 +107,7 @@ export const dictionaries = {
     'common.overdue': '⚠ ',
   },
   es: {
-    'app.name': 'FocusFlow',
+    'app.name': 'DayPlan',
     'nav.list': 'Lista',
     'nav.calendar': 'Calendario',
     'nav.profile': 'Perfil',
@@ -116,8 +116,8 @@ export const dictionaries = {
     'auth.signUp': 'Crear cuenta',
     'auth.signingIn': 'Iniciando sesión…',
     'auth.creating': 'Creando…',
-    'auth.welcomeBack': 'Bienvenido de nuevo a FocusFlow',
-    'auth.startUsing': 'Empieza a usar FocusFlow',
+    'auth.welcomeBack': 'Bienvenido de nuevo a DayPlan',
+    'auth.startUsing': 'Empieza a usar DayPlan',
     'auth.email': 'Email',
     'auth.password': 'Contraseña',
     'auth.noAccount': '¿No tienes cuenta?',

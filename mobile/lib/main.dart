@@ -12,7 +12,7 @@ Future<void> main() async {
     anonKey: 'sb_publishable_v7Saf-elWkqpg-fxCuEceg_4RYVyNYQ',
   );
 
-  runApp(const FocusFlowApp());
+  runApp(const DayPlanApp());
 }
 
 final supabase = Supabase.instance.client;
@@ -35,15 +35,15 @@ IconData themeIcon(ThemeMode mode) {
   };
 }
 
-class FocusFlowApp extends StatelessWidget {
-  const FocusFlowApp({super.key});
+class DayPlanApp extends StatelessWidget {
+  const DayPlanApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: themeMode,
       builder: (context, mode, _) => MaterialApp(
-        title: 'FocusFlow',
+        title: 'DayPlan',
         debugShowCheckedModeBanner: false,
         themeMode: mode,
         theme: ThemeData(

@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FocusFlow",
-  description: "Productivity app with realtime sync and AI planning.",
+  title: "DayPlan",
+  description: "Plan your day with tasks, calendar and AI.",
 };
 
 export default function RootLayout({
