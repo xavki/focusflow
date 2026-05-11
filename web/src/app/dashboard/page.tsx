@@ -10,6 +10,16 @@ import { NavTabs } from '@/components/NavTabs'
 import { AIPlanModal } from '@/components/AIPlanModal'
 import { ThemeToggle } from '@/components/HeaderControls'
 import { useI18n } from '@/lib/i18n/context'
+import type { TranslationKey } from '@/lib/i18n/dictionaries'
+
+function filterKey(f: Filter): TranslationKey {
+  switch (f) {
+    case 'all': return 'filter.all'
+    case 'today': return 'filter.today'
+    case 'week': return 'filter.week'
+    case 'no-date': return 'filter.noDate'
+  }
+}
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -209,7 +219,7 @@ export default function DashboardPage() {
               {t('tasks.your')}
             </h2>
             <p className="mt-1 text-sm text-zinc-500">
-              {pending} {t('tasks.pending')} {filter !== 'all' && `· ${t(`filter.${filter === 'no-date' ? 'noDate' : filter}` as const)}`}
+              {pending} {t('tasks.pending')} {filter !== 'all' && `· ${t(filterKey(filter))}`}
             </p>
           </div>
           <div className="flex gap-2">
@@ -285,7 +295,7 @@ export default function DashboardPage() {
                   : 'bg-zinc-200 text-zinc-700 hover:bg-zinc-300 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700'
               }`}
             >
-              {t(`filter.${f === 'no-date' ? 'noDate' : f}` as const)}
+              {t(filterKey(f))}
             </button>
           ))}
         </div>

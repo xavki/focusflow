@@ -106,17 +106,21 @@ export default function ProfilePage() {
             <div>
               <label className="block text-xs font-medium text-zinc-500">{t('profile.theme')}</label>
               <div className="mt-1 inline-flex rounded-lg border border-zinc-300 bg-white p-1 dark:border-zinc-700 dark:bg-zinc-900">
-                {(['system', 'light', 'dark'] as const).map((opt) => (
+                {([
+                  { value: 'system', key: 'theme.system' },
+                  { value: 'light', key: 'theme.light' },
+                  { value: 'dark', key: 'theme.dark' },
+                ] as const).map((opt) => (
                   <button
-                    key={opt}
-                    onClick={() => setTheme(opt)}
+                    key={opt.value}
+                    onClick={() => setTheme(opt.value)}
                     className={`rounded-md px-3 py-1 text-xs font-medium transition ${
-                      theme === opt
+                      theme === opt.value
                         ? 'bg-indigo-600 text-white'
                         : 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800'
                     }`}
                   >
-                    {t(`theme.${opt}` as const)}
+                    {t(opt.key)}
                   </button>
                 ))}
               </div>

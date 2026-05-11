@@ -5,6 +5,13 @@ import { supabase } from '@/lib/supabase'
 import type { Priority } from '@/lib/types'
 import { PRIORITY_COLORS } from '@/lib/types'
 import { useI18n } from '@/lib/i18n/context'
+import type { TranslationKey } from '@/lib/i18n/dictionaries'
+
+function priorityKey(p: Priority): TranslationKey {
+  if (p === 'high') return 'tasks.priorityHigh'
+  if (p === 'medium') return 'tasks.priorityMedium'
+  return 'tasks.priorityLow'
+}
 
 type Suggested = {
   title: string
@@ -190,7 +197,7 @@ export function AIPlanModal({ onClose }: { onClose: () => void }) {
                             <span
                               className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${PRIORITY_COLORS[s.priority].badge}`}
                             >
-                              {t(`tasks.priority${s.priority.charAt(0).toUpperCase() + s.priority.slice(1)}` as 'tasks.priorityHigh' | 'tasks.priorityMedium' | 'tasks.priorityLow')}
+                              {t(priorityKey(s.priority))}
                             </span>
                           )}
                         </div>

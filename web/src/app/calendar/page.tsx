@@ -20,8 +20,29 @@ function toIso(year: number, month: number, day: number) {
 export default function CalendarPage() {
   const router = useRouter()
   const { t, locale } = useI18n()
-  const WEEK_DAYS = [0, 1, 2, 3, 4, 5, 6].map((i) => t(`calendar.weekday.${i}` as const))
-  const MONTHS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => t(`calendar.month.${i}` as const))
+  const WEEK_DAYS = [
+    t('calendar.weekday.0'),
+    t('calendar.weekday.1'),
+    t('calendar.weekday.2'),
+    t('calendar.weekday.3'),
+    t('calendar.weekday.4'),
+    t('calendar.weekday.5'),
+    t('calendar.weekday.6'),
+  ]
+  const MONTHS = [
+    t('calendar.month.0'),
+    t('calendar.month.1'),
+    t('calendar.month.2'),
+    t('calendar.month.3'),
+    t('calendar.month.4'),
+    t('calendar.month.5'),
+    t('calendar.month.6'),
+    t('calendar.month.7'),
+    t('calendar.month.8'),
+    t('calendar.month.9'),
+    t('calendar.month.10'),
+    t('calendar.month.11'),
+  ]
   const [email, setEmail] = useState<string | null>(null)
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
@@ -405,28 +426,28 @@ function DayModal({
             </li>
           )}
 
-          {tasks.map((t) => (
+          {tasks.map((task) => (
             <li
-              key={t.id}
+              key={task.id}
               className="group flex items-center gap-3 rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800"
             >
               <input
                 type="checkbox"
-                checked={t.completed}
-                onChange={() => toggle(t)}
+                checked={task.completed}
+                onChange={() => toggle(task)}
                 className="h-4 w-4 cursor-pointer rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
               />
               <span
                 className={`flex-1 text-sm ${
-                  t.completed
+                  task.completed
                     ? 'text-zinc-400 line-through'
                     : 'text-zinc-900 dark:text-zinc-50'
                 }`}
               >
-                {t.title}
+                {task.title}
               </span>
               <button
-                onClick={() => remove(t.id)}
+                onClick={() => remove(task.id)}
                 className="text-xs text-zinc-400 opacity-0 transition hover:text-red-600 group-hover:opacity-100"
               >
                 {t('tasks.delete')}
