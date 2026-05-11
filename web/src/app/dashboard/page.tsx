@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import type { Filter, Task } from '@/lib/types'
+import type { Filter, Priority, Task } from '@/lib/types'
+import { PRIORITY_COLORS, PRIORITY_LABEL } from '@/lib/types'
 import { addDaysISO, formatDueDate, isOverdue, todayISO } from '@/lib/dates'
 import { NavTabs } from '@/components/NavTabs'
 
@@ -11,14 +12,12 @@ export default function DashboardPage() {
   const router = useRouter()
   const [email, setEmail] = useState<string | null>(null)
   const [tasks, setTasks] = useState<Task[]>([])
-  const [newTitle, setNewTitle] = useState('')
-  const [newDate, setNewDate] = useState('')
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editingTitle, setEditingTitle] = useState('')
-  const [editingDate, setEditingDate] = useState('')
+  const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [showAdd, setShowAdd] = useState(false)
 
   useEffect(() => {
     let channel: ReturnType<typeof supabase.channel> | null = null
@@ -82,41 +81,29 @@ export default function DashboardPage() {
   const filteredTasks = useMemo(() => {
     const today = todayISO()
     const inWeek = addDaysISO(7)
+    const q = search.trim().toLowerCase()
+
+    let result = tasks
+    if (q) {
+      result = result.filter(
+        (t) =>
+          t.title.toLowerCase().includes(q) ||
+          (t.description?.toLowerCase().includes(q) ?? false)
+      )
+    }
     switch (filter) {
       case 'today':
-        return tasks.filter((t) => t.due_date === today)
+        return result.filter((t) => t.due_date === today)
       case 'week':
-        return tasks.filter(
+        return result.filter(
           (t) => t.due_date && t.due_date >= today && t.due_date <= inWeek
         )
       case 'no-date':
-        return tasks.filter((t) => !t.due_date)
+        return result.filter((t) => !t.due_date)
       default:
-        return tasks
+        return result
     }
-  }, [tasks, filter])
-
-  async function addTask(e: React.FormEvent) {
-    e.preventDefault()
-    const title = newTitle.trim()
-    if (!title) return
-
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
-    const { error } = await supabase.from('tasks').insert({
-      title,
-      user_id: user.id,
-      due_date: newDate || null,
-    })
-
-    if (error) {
-      setError(error.message)
-      return
-    }
-    setNewTitle('')
-    setNewDate('')
-  }
+  }, [tasks, filter, search])
 
   async function toggleTask(task: Task) {
     const { error } = await supabase
@@ -124,21 +111,6 @@ export default function DashboardPage() {
       .update({ completed: !task.completed })
       .eq('id', task.id)
     if (error) setError(error.message)
-  }
-
-  async function saveEdit(id: string) {
-    const title = editingTitle.trim()
-    if (!title) {
-      setEditingId(null)
-      return
-    }
-
-    const { error } = await supabase
-      .from('tasks')
-      .update({ title, due_date: editingDate || null })
-      .eq('id', id)
-    if (error) setError(error.message)
-    setEditingId(null)
   }
 
   async function deleteTask(id: string) {
@@ -182,36 +154,44 @@ export default function DashboardPage() {
       </header>
 
       <main className="mx-auto max-w-2xl px-6 py-10">
-        <h2 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-          Your tasks
-        </h2>
-        <p className="mt-1 text-sm text-zinc-500">
-          {pending} pending {filter !== 'all' && `· ${filterLabel(filter)}`}
-        </p>
-
-        <form onSubmit={addTask} className="mt-6 flex flex-col gap-2 sm:flex-row">
-          <input
-            type="text"
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            placeholder="Add a new task…"
-            className="flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-          />
-          <input
-            type="date"
-            value={newDate}
-            onChange={(e) => setNewDate(e.target.value)}
-            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 [color-scheme:light] dark:[color-scheme:dark]"
-          />
+        <div className="flex items-end justify-between">
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+              Your tasks
+            </h2>
+            <p className="mt-1 text-sm text-zinc-500">
+              {pending} pending {filter !== 'all' && `· ${filterLabel(filter)}`}
+            </p>
+          </div>
           <button
-            type="submit"
+            onClick={() => setShowAdd(true)}
             className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 active:scale-95"
           >
-            Add
+            + New task
           </button>
-        </form>
+        </div>
 
-        <div className="mt-6 flex flex-wrap gap-2">
+        <div className="mt-6 flex items-center gap-2">
+          <div className="relative flex-1">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search tasks…"
+              className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 pl-9 text-sm text-zinc-900 transition focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            />
+            <svg
+              className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+            </svg>
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
           {(['all', 'today', 'week', 'no-date'] as Filter[]).map((f) => (
             <button
               key={f}
@@ -232,7 +212,7 @@ export default function DashboardPage() {
         <ul className="mt-6 space-y-2">
           {filteredTasks.length === 0 && (
             <li className="rounded-xl border border-dashed border-zinc-300 px-4 py-12 text-center text-sm text-zinc-500 dark:border-zinc-700">
-              No tasks here.
+              {search ? 'No tasks match your search.' : 'No tasks here.'}
             </li>
           )}
 
@@ -241,97 +221,90 @@ export default function DashboardPage() {
             return (
               <li
                 key={task.id}
-                className="group flex items-center gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 transition hover:border-zinc-300 hover:shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700"
+                className="group flex items-start gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 transition hover:border-zinc-300 hover:shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700"
               >
                 <input
                   type="checkbox"
                   checked={task.completed}
                   onChange={() => toggleTask(task)}
-                  className="h-4 w-4 cursor-pointer rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                  className="mt-1 h-4 w-4 cursor-pointer rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
                 />
 
-                {editingId === task.id ? (
-                  <div className="flex flex-1 flex-col gap-2 sm:flex-row">
-                    <input
-                      type="text"
-                      value={editingTitle}
-                      onChange={(e) => setEditingTitle(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') saveEdit(task.id)
-                        if (e.key === 'Escape') setEditingId(null)
-                      }}
-                      autoFocus
-                      className="flex-1 rounded border border-zinc-300 bg-white px-2 py-1 text-sm text-zinc-900 focus:border-indigo-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-                    />
-                    <input
-                      type="date"
-                      value={editingDate}
-                      onChange={(e) => setEditingDate(e.target.value)}
-                      className="rounded border border-zinc-300 bg-white px-2 py-1 text-sm text-zinc-900 focus:border-indigo-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 [color-scheme:light] dark:[color-scheme:dark]"
-                    />
-                    <button
-                      onClick={() => saveEdit(task.id)}
-                      className="rounded bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700"
-                    >
-                      Save
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    {task.priority && (
                       <span
-                        onDoubleClick={() => {
-                          setEditingId(task.id)
-                          setEditingTitle(task.title)
-                          setEditingDate(task.due_date ?? '')
-                        }}
-                        className={`block truncate text-sm ${
-                          task.completed
-                            ? 'text-zinc-400 line-through'
-                            : 'text-zinc-900 dark:text-zinc-50'
+                        className={`h-2 w-2 rounded-full ${PRIORITY_COLORS[task.priority].dot}`}
+                        title={`Priority: ${PRIORITY_LABEL[task.priority]}`}
+                      />
+                    )}
+                    <span
+                      onDoubleClick={() => setEditingTask(task)}
+                      className={`block truncate text-sm font-medium ${
+                        task.completed
+                          ? 'text-zinc-400 line-through'
+                          : 'text-zinc-900 dark:text-zinc-50'
+                      }`}
+                    >
+                      {task.title}
+                    </span>
+                  </div>
+                  {task.description && (
+                    <p className="mt-1 line-clamp-2 text-xs text-zinc-500">
+                      {task.description}
+                    </p>
+                  )}
+                  <div className="mt-1 flex items-center gap-2">
+                    {task.due_date && (
+                      <span
+                        className={`text-xs ${
+                          overdue ? 'text-red-500 font-medium' : 'text-zinc-500'
                         }`}
                       >
-                        {task.title}
+                        {overdue && '⚠ '}
+                        {formatDueDate(task.due_date)}
                       </span>
-                      {task.due_date && (
-                        <span
-                          className={`mt-0.5 inline-block text-xs ${
-                            overdue
-                              ? 'text-red-500'
-                              : 'text-zinc-500'
-                          }`}
-                        >
-                          {overdue && '⚠ '}
-                          {formatDueDate(task.due_date)}
-                        </span>
-                      )}
-                    </div>
+                    )}
+                    {task.priority && (
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${PRIORITY_COLORS[task.priority].badge}`}
+                      >
+                        {PRIORITY_LABEL[task.priority]}
+                      </span>
+                    )}
+                  </div>
+                </div>
 
-                    <div className="flex gap-2 opacity-0 transition group-hover:opacity-100">
-                      <button
-                        onClick={() => {
-                          setEditingId(task.id)
-                          setEditingTitle(task.title)
-                          setEditingDate(task.due_date ?? '')
-                        }}
-                        className="text-xs text-zinc-500 hover:text-indigo-600"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => deleteTask(task.id)}
-                        className="text-xs text-zinc-500 hover:text-red-600"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </>
-                )}
+                <div className="flex shrink-0 gap-2 opacity-0 transition group-hover:opacity-100">
+                  <button
+                    onClick={() => setEditingTask(task)}
+                    className="text-xs text-zinc-500 hover:text-indigo-600"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => deleteTask(task.id)}
+                    className="text-xs text-zinc-500 hover:text-red-600"
+                  >
+                    Delete
+                  </button>
+                </div>
               </li>
             )
           })}
         </ul>
       </main>
+
+      {showAdd && (
+        <TaskModal onClose={() => setShowAdd(false)} onError={setError} />
+      )}
+      {editingTask && (
+        <TaskModal
+          task={editingTask}
+          onClose={() => setEditingTask(null)}
+          onError={setError}
+        />
+      )}
     </div>
   )
 }
@@ -343,4 +316,144 @@ function filterLabel(f: Filter): string {
     case 'week': return 'This week'
     case 'no-date': return 'No date'
   }
+}
+
+function TaskModal({
+  task,
+  onClose,
+  onError,
+}: {
+  task?: Task
+  onClose: () => void
+  onError: (msg: string) => void
+}) {
+  const [title, setTitle] = useState(task?.title ?? '')
+  const [description, setDescription] = useState(task?.description ?? '')
+  const [dueDate, setDueDate] = useState(task?.due_date ?? '')
+  const [priority, setPriority] = useState<Priority | ''>(task?.priority ?? '')
+  const [saving, setSaving] = useState(false)
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault()
+    const trimmed = title.trim()
+    if (!trimmed) return
+
+    setSaving(true)
+    const payload = {
+      title: trimmed,
+      description: description.trim() || null,
+      due_date: dueDate || null,
+      priority: priority || null,
+    }
+
+    if (task) {
+      const { error } = await supabase
+        .from('tasks')
+        .update(payload)
+        .eq('id', task.id)
+      if (error) onError(error.message)
+    } else {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { error } = await supabase
+          .from('tasks')
+          .insert({ ...payload, user_id: user.id })
+        if (error) onError(error.message)
+      }
+    }
+    setSaving(false)
+    onClose()
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-20 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
+      <form
+        onSubmit={save}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md space-y-4 rounded-2xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
+      >
+        <div className="flex items-start justify-between">
+          <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+            {task ? 'Edit task' : 'New task'}
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-zinc-500">Title</label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            autoFocus
+            required
+            className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-zinc-500">
+            Description <span className="text-zinc-400">(optional)</span>
+          </label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={3}
+            className="mt-1 w-full resize-none rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-zinc-500">Due date</label>
+            <input
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 [color-scheme:light] dark:[color-scheme:dark]"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-zinc-500">Priority</label>
+            <select
+              value={priority}
+              onChange={(e) => setPriority(e.target.value as Priority | '')}
+              className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+            >
+              <option value="">None</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50 active:scale-95"
+          >
+            {saving ? 'Saving…' : task ? 'Save' : 'Create'}
+          </button>
+        </div>
+      </form>
+    </div>
+  )
 }

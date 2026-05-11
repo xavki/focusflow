@@ -6,6 +6,7 @@ import 'package:table_calendar/table_calendar.dart';
 
 import '../main.dart';
 import '../models/task.dart';
+import '../widgets/task_dialog.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -70,9 +71,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             column: 'user_id',
             value: userId,
           ),
-          callback: (_) {
-            _fetchTasks();
-          },
+          callback: (_) => _fetchTasks(),
         )
         .subscribe();
   }
@@ -108,6 +107,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
+          ValueListenableBuilder<ThemeMode>(
+            valueListenable: themeMode,
+            builder: (_, mode, __) => IconButton(
+              icon: Icon(themeIcon(mode)),
+              tooltip: 'Theme: ${mode.name}',
+              onPressed: toggleTheme,
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.today),
             tooltip: 'Today',
@@ -143,20 +150,47 @@ class _CalendarScreenState extends State<CalendarScreen> {
               },
               onFormatChanged: (f) => setState(() => _format = f),
               onPageChanged: (focused) => _focusedDay = focused,
+              calendarBuilders: CalendarBuilders(
+                markerBuilder: (context, day, events) {
+                  if (events.isEmpty) return null;
+                  final colors = <Color>{};
+                  for (final t in events) {
+                    if (t.priority != null) colors.add(t.priority!.color);
+                  }
+                  if (colors.isEmpty) {
+                    colors.add(Theme.of(context).colorScheme.primary);
+                  }
+                  return Positioned(
+                    bottom: 4,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: colors
+                          .take(3)
+                          .map(
+                            (c) => Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 1),
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: c,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  );
+                },
+              ),
               calendarStyle: CalendarStyle(
                 todayDecoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
                   shape: BoxShape.circle,
                 ),
                 selectedDecoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.primary,
                   shape: BoxShape.circle,
                 ),
-                markerDecoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary,
-                  shape: BoxShape.circle,
-                ),
-                markersMaxCount: 3,
               ),
               headerStyle: const HeaderStyle(
                 formatButtonVisible: true,
@@ -213,8 +247,7 @@ class _TaskListForDay extends StatelessWidget {
                       padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
                         border: Border.all(
-                          color: Colors.grey.withOpacity(0.3),
-                          style: BorderStyle.solid,
+                          color: Colors.grey.withValues(alpha: 0.3),
                         ),
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -241,15 +274,40 @@ class _TaskListForDay extends StatelessWidget {
                                 ? Colors.green
                                 : Theme.of(context).colorScheme.primary,
                           ),
-                          title: Text(
-                            t.title,
-                            style: TextStyle(
-                              decoration: t.completed
-                                  ? TextDecoration.lineThrough
-                                  : null,
-                              color: t.completed ? Colors.grey : null,
-                            ),
+                          title: Row(
+                            children: [
+                              if (t.priority != null) ...[
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: t.priority!.color,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                              ],
+                              Expanded(
+                                child: Text(
+                                  t.title,
+                                  style: TextStyle(
+                                    decoration: t.completed
+                                        ? TextDecoration.lineThrough
+                                        : null,
+                                    color: t.completed ? Colors.grey : null,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
+                          subtitle: t.description != null && t.description!.isNotEmpty
+                              ? Text(
+                                  t.description!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 12),
+                                )
+                              : null,
                           onTap: onTap,
                         ),
                       );
@@ -262,58 +320,11 @@ class _TaskListForDay extends StatelessWidget {
   }
 }
 
-class _DayBottomSheet extends StatefulWidget {
+class _DayBottomSheet extends StatelessWidget {
   final DateTime day;
   final List<Task> tasks;
 
   const _DayBottomSheet({required this.day, required this.tasks});
-
-  @override
-  State<_DayBottomSheet> createState() => _DayBottomSheetState();
-}
-
-class _DayBottomSheetState extends State<_DayBottomSheet> {
-  final _titleCtrl = TextEditingController();
-
-  @override
-  void dispose() {
-    _titleCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _add() async {
-    final title = _titleCtrl.text.trim();
-    if (title.isEmpty) return;
-    final userId = supabase.auth.currentUser!.id;
-    try {
-      await supabase.from('tasks').insert({
-        'title': title,
-        'user_id': userId,
-        'due_date': Task.formatIso(widget.day),
-      });
-      _titleCtrl.clear();
-      if (mounted) Navigator.of(context).pop();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
-        );
-      }
-    }
-  }
-
-  Future<void> _toggle(Task t) async {
-    await supabase
-        .from('tasks')
-        .update({'completed': !t.completed})
-        .eq('id', t.id);
-    if (mounted) Navigator.of(context).pop();
-  }
-
-  Future<void> _delete(Task t) async {
-    await supabase.from('tasks').delete().eq('id', t.id);
-    if (mounted) Navigator.of(context).pop();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -322,7 +333,7 @@ class _DayBottomSheetState extends State<_DayBottomSheet> {
       padding: EdgeInsets.fromLTRB(20, 16, 20, bottomInset + 20),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Center(
             child: Container(
@@ -330,49 +341,42 @@ class _DayBottomSheetState extends State<_DayBottomSheet> {
               height: 4,
               margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
-                color: Colors.grey.withOpacity(0.4),
+                color: Colors.grey.withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
           ),
-          Text(
-            formatDueDate(widget.day),
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-          Text(
-            '${widget.tasks.length} ${widget.tasks.length == 1 ? 'task' : 'tasks'}',
-            style: const TextStyle(color: Colors.grey),
-          ),
-          const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
-                child: TextField(
-                  controller: _titleCtrl,
-                  decoration: const InputDecoration(
-                    hintText: 'Add a task for this day…',
-                    border: OutlineInputBorder(),
-                  ),
-                  onSubmitted: (_) => _add(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      formatDueDate(day),
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                    Text(
+                      '${tasks.length} ${tasks.length == 1 ? 'task' : 'tasks'}',
+                      style: const TextStyle(color: Colors.grey),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 8),
-              FilledButton(
-                onPressed: _add,
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 16,
-                  ),
-                ),
-                child: const Text('Add'),
+              FilledButton.icon(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  TaskDialog.show(context, defaultDate: day);
+                },
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add'),
               ),
             ],
           ),
           const SizedBox(height: 16),
-          if (widget.tasks.isEmpty)
+          if (tasks.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 24),
               child: Center(
@@ -389,28 +393,65 @@ class _DayBottomSheetState extends State<_DayBottomSheet> {
               ),
               child: ListView.separated(
                 shrinkWrap: true,
-                itemCount: widget.tasks.length,
+                itemCount: tasks.length,
                 separatorBuilder: (_, __) => const Divider(height: 1),
                 itemBuilder: (_, i) {
-                  final t = widget.tasks[i];
+                  final t = tasks[i];
                   return ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: Checkbox(
                       value: t.completed,
-                      onChanged: (_) => _toggle(t),
+                      onChanged: (_) async {
+                        await supabase
+                            .from('tasks')
+                            .update({'completed': !t.completed})
+                            .eq('id', t.id);
+                        if (context.mounted) Navigator.of(context).pop();
+                      },
                     ),
-                    title: Text(
-                      t.title,
-                      style: TextStyle(
-                        decoration: t.completed
-                            ? TextDecoration.lineThrough
-                            : null,
-                        color: t.completed ? Colors.grey : null,
-                      ),
+                    title: Row(
+                      children: [
+                        if (t.priority != null) ...[
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: t.priority!.color,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        Expanded(
+                          child: Text(
+                            t.title,
+                            style: TextStyle(
+                              decoration: t.completed
+                                  ? TextDecoration.lineThrough
+                                  : null,
+                              color: t.completed ? Colors.grey : null,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
+                    subtitle: t.description != null && t.description!.isNotEmpty
+                        ? Text(
+                            t.description!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          )
+                        : null,
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      TaskDialog.show(context, task: t);
+                    },
                     trailing: IconButton(
                       icon: const Icon(Icons.delete_outline, size: 20),
-                      onPressed: () => _delete(t),
+                      onPressed: () async {
+                        await supabase.from('tasks').delete().eq('id', t.id);
+                        if (context.mounted) Navigator.of(context).pop();
+                      },
                     ),
                   );
                 },

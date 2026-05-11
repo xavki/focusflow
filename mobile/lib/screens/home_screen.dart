@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../main.dart';
 import '../models/task.dart';
+import '../widgets/task_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,8 +17,10 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   List<Task> _tasks = [];
   TaskFilter _filter = TaskFilter.all;
+  String _search = '';
   bool _loading = true;
   RealtimeChannel? _channel;
+  final _searchCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -28,6 +31,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     if (_channel != null) supabase.removeChannel(_channel!);
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -53,7 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final userId = supabase.auth.currentUser!.id;
 
     _channel = supabase
-        .channel('tasks-changes')
+        .channel('tasks-home')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
@@ -99,38 +103,34 @@ class _HomeScreenState extends State<HomeScreen> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final inWeek = today.add(const Duration(days: 7));
+    final q = _search.trim().toLowerCase();
+
+    var result = _tasks;
+
+    if (q.isNotEmpty) {
+      result = result.where((t) {
+        return t.title.toLowerCase().contains(q) ||
+            (t.description?.toLowerCase().contains(q) ?? false);
+      }).toList();
+    }
+
     switch (_filter) {
       case TaskFilter.today:
-        return _tasks.where((t) {
+        return result.where((t) {
           if (t.dueDate == null) return false;
           final d = DateTime(t.dueDate!.year, t.dueDate!.month, t.dueDate!.day);
           return d == today;
         }).toList();
       case TaskFilter.week:
-        return _tasks.where((t) {
+        return result.where((t) {
           if (t.dueDate == null) return false;
           final d = DateTime(t.dueDate!.year, t.dueDate!.month, t.dueDate!.day);
           return !d.isBefore(today) && !d.isAfter(inWeek);
         }).toList();
       case TaskFilter.noDate:
-        return _tasks.where((t) => t.dueDate == null).toList();
+        return result.where((t) => t.dueDate == null).toList();
       case TaskFilter.all:
-        return _tasks;
-    }
-  }
-
-  Future<void> _addTask(String title, DateTime? dueDate) async {
-    final trimmed = title.trim();
-    if (trimmed.isEmpty) return;
-    final userId = supabase.auth.currentUser!.id;
-    try {
-      await supabase.from('tasks').insert({
-        'title': trimmed,
-        'user_id': userId,
-        'due_date': dueDate != null ? Task.formatIso(dueDate) : null,
-      });
-    } catch (e) {
-      _showError(e.toString());
+        return result;
     }
   }
 
@@ -140,19 +140,6 @@ class _HomeScreenState extends State<HomeScreen> {
           .from('tasks')
           .update({'completed': !task.completed})
           .eq('id', task.id);
-    } catch (e) {
-      _showError(e.toString());
-    }
-  }
-
-  Future<void> _updateTask(Task task, String newTitle, DateTime? newDate) async {
-    final trimmed = newTitle.trim();
-    if (trimmed.isEmpty) return;
-    try {
-      await supabase.from('tasks').update({
-        'title': trimmed,
-        'due_date': newDate != null ? Task.formatIso(newDate) : null,
-      }).eq('id', task.id);
     } catch (e) {
       _showError(e.toString());
     }
@@ -173,80 +160,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<void> _showTaskDialog({Task? task}) async {
-    final titleCtrl = TextEditingController(text: task?.title ?? '');
-    DateTime? selectedDate = task?.dueDate;
-
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocalState) => AlertDialog(
-          title: Text(task == null ? 'New task' : 'Edit task'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: titleCtrl,
-                autofocus: true,
-                decoration: const InputDecoration(hintText: 'What needs doing?'),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.calendar_today, size: 16),
-                      label: Text(
-                        selectedDate == null
-                            ? 'No date'
-                            : formatDueDate(selectedDate),
-                      ),
-                      onPressed: () async {
-                        final picked = await showDatePicker(
-                          context: ctx,
-                          initialDate: selectedDate ?? DateTime.now(),
-                          firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                          lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
-                        );
-                        if (picked != null) {
-                          setLocalState(() => selectedDate = picked);
-                        }
-                      },
-                    ),
-                  ),
-                  if (selectedDate != null)
-                    IconButton(
-                      icon: const Icon(Icons.close, size: 18),
-                      tooltip: 'Clear date',
-                      onPressed: () => setLocalState(() => selectedDate = null),
-                    ),
-                ],
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: Text(task == null ? 'Add' : 'Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (saved == true) {
-      if (task == null) {
-        await _addTask(titleCtrl.text, selectedDate);
-      } else {
-        await _updateTask(task, titleCtrl.text, selectedDate);
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final user = supabase.auth.currentUser;
@@ -260,6 +173,14 @@ class _HomeScreenState extends State<HomeScreen> {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
+          ValueListenableBuilder<ThemeMode>(
+            valueListenable: themeMode,
+            builder: (_, mode, __) => IconButton(
+              icon: Icon(themeIcon(mode)),
+              tooltip: 'Theme: ${mode.name}',
+              onPressed: toggleTheme,
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Sign out',
@@ -268,7 +189,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showTaskDialog(),
+        onPressed: () => TaskDialog.show(context),
         icon: const Icon(Icons.add),
         label: const Text('New task'),
       ),
@@ -295,6 +216,31 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                   ),
                 ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: TextField(
+                    controller: _searchCtrl,
+                    decoration: InputDecoration(
+                      hintText: 'Search tasks…',
+                      prefixIcon: const Icon(Icons.search, size: 20),
+                      isDense: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      suffixIcon: _search.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.close, size: 18),
+                              onPressed: () {
+                                _searchCtrl.clear();
+                                setState(() => _search = '');
+                              },
+                            )
+                          : null,
+                    ),
+                    onChanged: (v) => setState(() => _search = v),
+                  ),
+                ),
+                const SizedBox(height: 8),
                 SizedBox(
                   height: 44,
                   child: ListView(
@@ -313,15 +259,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     }).toList(),
                   ),
                 ),
-                const SizedBox(height: 8),
                 const Divider(height: 1),
                 Expanded(
                   child: filtered.isEmpty
-                      ? const Center(
+                      ? Center(
                           child: Text(
-                            'No tasks here.\nTap + to add one.',
+                            _search.isNotEmpty
+                                ? 'No tasks match your search.'
+                                : 'No tasks here.\nTap + to add one.',
                             textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey),
+                            style: const TextStyle(color: Colors.grey),
                           ),
                         )
                       : ListView.separated(
@@ -330,59 +277,145 @@ class _HomeScreenState extends State<HomeScreen> {
                           separatorBuilder: (_, __) => const Divider(height: 1),
                           itemBuilder: (context, i) {
                             final task = filtered[i];
-                            final overdue = isOverdue(task.dueDate, task.completed);
-                            return Dismissible(
-                              key: ValueKey(task.id),
-                              direction: DismissDirection.endToStart,
-                              background: Container(
-                                color: Colors.red,
-                                alignment: Alignment.centerRight,
-                                padding: const EdgeInsets.only(right: 20),
-                                child: const Icon(Icons.delete, color: Colors.white),
-                              ),
-                              onDismissed: (_) => _deleteTask(task),
-                              child: ListTile(
-                                leading: Checkbox(
-                                  value: task.completed,
-                                  onChanged: (_) => _toggleTask(task),
-                                ),
-                                title: Text(
-                                  task.title,
-                                  style: TextStyle(
-                                    decoration: task.completed
-                                        ? TextDecoration.lineThrough
-                                        : null,
-                                    color: task.completed ? Colors.grey : null,
-                                  ),
-                                ),
-                                subtitle: task.dueDate != null
-                                    ? Row(
-                                        children: [
-                                          Icon(
-                                            Icons.event,
-                                            size: 12,
-                                            color: overdue ? Colors.red : Colors.grey,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            formatDueDate(task.dueDate),
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: overdue ? Colors.red : Colors.grey,
-                                              fontWeight: overdue ? FontWeight.w600 : null,
-                                            ),
-                                          ),
-                                        ],
-                                      )
-                                    : null,
-                                onTap: () => _showTaskDialog(task: task),
-                              ),
+                            return _TaskTile(
+                              task: task,
+                              onToggle: () => _toggleTask(task),
+                              onDelete: () => _deleteTask(task),
+                              onEdit: () => TaskDialog.show(context, task: task),
                             );
                           },
                         ),
                 ),
               ],
             ),
+    );
+  }
+}
+
+class _TaskTile extends StatelessWidget {
+  final Task task;
+  final VoidCallback onToggle;
+  final VoidCallback onDelete;
+  final VoidCallback onEdit;
+
+  const _TaskTile({
+    required this.task,
+    required this.onToggle,
+    required this.onDelete,
+    required this.onEdit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final overdue = isOverdue(task.dueDate, task.completed);
+
+    return Dismissible(
+      key: ValueKey(task.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        color: Colors.red,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        child: const Icon(Icons.delete, color: Colors.white),
+      ),
+      onDismissed: (_) => onDelete(),
+      child: ListTile(
+        leading: Checkbox(
+          value: task.completed,
+          onChanged: (_) => onToggle(),
+        ),
+        title: Row(
+          children: [
+            if (task.priority != null) ...[
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: task.priority!.color,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+            Expanded(
+              child: Text(
+                task.title,
+                style: TextStyle(
+                  decoration: task.completed
+                      ? TextDecoration.lineThrough
+                      : null,
+                  color: task.completed ? Colors.grey : null,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (task.description != null && task.description!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  task.description!,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ),
+            if (task.dueDate != null || task.priority != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Wrap(
+                  spacing: 8,
+                  children: [
+                    if (task.dueDate != null)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.event,
+                            size: 12,
+                            color: overdue ? Colors.red : Colors.grey,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            formatDueDate(task.dueDate),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: overdue ? Colors.red : Colors.grey,
+                              fontWeight: overdue ? FontWeight.w600 : null,
+                            ),
+                          ),
+                        ],
+                      ),
+                    if (task.priority != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: task.priority!.color.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          task.priority!.label.toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: task.priority!.color,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+        onTap: onEdit,
+      ),
     );
   }
 }

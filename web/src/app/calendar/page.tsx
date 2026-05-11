@@ -224,18 +224,26 @@ export default function CalendarPage() {
                   {cell.day}
                 </div>
                 <div className="mt-1 space-y-0.5">
-                  {dayTasks.slice(0, 3).map((t) => (
-                    <div
-                      key={t.id}
-                      className={`truncate rounded px-1.5 py-0.5 text-[11px] ${
-                        t.completed
-                          ? 'bg-zinc-100 text-zinc-400 line-through dark:bg-zinc-900'
-                          : 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-200'
-                      }`}
-                    >
-                      {t.title}
-                    </div>
-                  ))}
+                  {dayTasks.slice(0, 3).map((t) => {
+                    let bg = 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-200'
+                    if (t.completed) {
+                      bg = 'bg-zinc-100 text-zinc-400 line-through dark:bg-zinc-900'
+                    } else if (t.priority === 'high') {
+                      bg = 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200'
+                    } else if (t.priority === 'medium') {
+                      bg = 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
+                    } else if (t.priority === 'low') {
+                      bg = 'bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200'
+                    }
+                    return (
+                      <div
+                        key={t.id}
+                        className={`truncate rounded px-1.5 py-0.5 text-[11px] ${bg}`}
+                      >
+                        {t.title}
+                      </div>
+                    )
+                  })}
                   {dayTasks.length > 3 && (
                     <div className="px-1.5 text-[10px] text-zinc-500">
                       +{dayTasks.length - 3} more

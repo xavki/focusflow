@@ -17,19 +17,48 @@ Future<void> main() async {
 
 final supabase = Supabase.instance.client;
 
+final themeMode = ValueNotifier<ThemeMode>(ThemeMode.system);
+
+void toggleTheme() {
+  themeMode.value = switch (themeMode.value) {
+    ThemeMode.system => ThemeMode.light,
+    ThemeMode.light => ThemeMode.dark,
+    ThemeMode.dark => ThemeMode.system,
+  };
+}
+
+IconData themeIcon(ThemeMode mode) {
+  return switch (mode) {
+    ThemeMode.system => Icons.brightness_auto,
+    ThemeMode.light => Icons.light_mode,
+    ThemeMode.dark => Icons.dark_mode,
+  };
+}
+
 class FocusFlowApp extends StatelessWidget {
   const FocusFlowApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'FocusFlow',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6366F1)),
-        useMaterial3: true,
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: themeMode,
+      builder: (context, mode, _) => MaterialApp(
+        title: 'FocusFlow',
+        debugShowCheckedModeBanner: false,
+        themeMode: mode,
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6366F1)),
+          useMaterial3: true,
+        ),
+        darkTheme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFF6366F1),
+            brightness: Brightness.dark,
+          ),
+          useMaterial3: true,
+        ),
+        home: const AuthGate(),
       ),
-      home: const AuthGate(),
     );
   }
 }

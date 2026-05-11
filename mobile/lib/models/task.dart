@@ -1,7 +1,61 @@
+import 'package:flutter/material.dart';
+
+enum Priority { low, medium, high }
+
+extension PriorityX on Priority {
+  String get label {
+    switch (this) {
+      case Priority.low:
+        return 'Low';
+      case Priority.medium:
+        return 'Medium';
+      case Priority.high:
+        return 'High';
+    }
+  }
+
+  String get value {
+    switch (this) {
+      case Priority.low:
+        return 'low';
+      case Priority.medium:
+        return 'medium';
+      case Priority.high:
+        return 'high';
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case Priority.low:
+        return const Color(0xFF0EA5E9);
+      case Priority.medium:
+        return const Color(0xFFF59E0B);
+      case Priority.high:
+        return const Color(0xFFEF4444);
+    }
+  }
+
+  static Priority? fromString(String? s) {
+    switch (s) {
+      case 'low':
+        return Priority.low;
+      case 'medium':
+        return Priority.medium;
+      case 'high':
+        return Priority.high;
+      default:
+        return null;
+    }
+  }
+}
+
 class Task {
   final String id;
   final String userId;
   final String title;
+  final String? description;
+  final Priority? priority;
   final bool completed;
   final DateTime? dueDate;
   final DateTime createdAt;
@@ -10,6 +64,8 @@ class Task {
     required this.id,
     required this.userId,
     required this.title,
+    required this.description,
+    required this.priority,
     required this.completed,
     required this.dueDate,
     required this.createdAt,
@@ -20,6 +76,8 @@ class Task {
       id: map['id'] as String,
       userId: map['user_id'] as String,
       title: map['title'] as String,
+      description: map['description'] as String?,
+      priority: PriorityX.fromString(map['priority'] as String?),
       completed: map['completed'] as bool,
       dueDate: map['due_date'] != null
           ? DateTime.parse(map['due_date'] as String)
